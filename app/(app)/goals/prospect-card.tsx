@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { CalendarDays, Check, Pencil, Plus, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ComponentStatus, Prospect, SnapshotUseCase } from "./types";
 import { STATUS_CONFIG, STATUS_CYCLE } from "./types";
 
@@ -30,6 +30,11 @@ export function ProspectCard({ prospect, onEdit }: ProspectCardProps) {
   const [statuses, setStatuses] = useState<Record<string, Record<string, ComponentStatus>>>(
     (prospect.component_statuses as Record<string, Record<string, ComponentStatus>>) ?? {}
   );
+  useEffect(() => {
+    setSnapshot((prospect.use_case_snapshot as SnapshotUseCase[]) ?? []);
+    setStatuses((prospect.component_statuses as Record<string, Record<string, ComponentStatus>>) ?? {});
+  }, [prospect.use_case_snapshot, prospect.component_statuses]);
+
   // Per-use-case draft component: ucId -> draft text | null
   const [drafts, setDrafts] = useState<Record<string, string | null>>({});
   const draftRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -206,7 +211,7 @@ export function ProspectCard({ prospect, onEdit }: ProspectCardProps) {
                     })}
 
                     {/* Draft row */}
-                    {draft !== null && (
+                    {draft != null && (
                       <div className="flex items-center gap-2 animate-in slide-in-from-bottom-1 duration-150">
                         <input
                           ref={(el) => { draftRefs.current[uc.id] = el; }}
@@ -233,7 +238,7 @@ export function ProspectCard({ prospect, onEdit }: ProspectCardProps) {
                     )}
 
                     {/* Add component */}
-                    {draft === null && (
+                    {draft == null && (
                       <button
                         onClick={() => addDraft(uc.id)}
                         className="flex items-center gap-1 mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
