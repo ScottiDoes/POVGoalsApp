@@ -246,11 +246,19 @@ export function ProspectCard({ prospect, onEdit }: ProspectCardProps) {
                           ) : (
                             <>
                               <span className={cn(
-                                "text-sm flex-1 leading-snug",
+                                "text-sm leading-snug",
                                 status === "disregarded" && "line-through text-muted-foreground/50"
                               )}>
                                 {component}
                               </span>
+                              <button
+                                onClick={() => startEdit(uc.id, component)}
+                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all shrink-0"
+                                title="Edit component"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                              <div className="flex-1" />
                               <button
                                 onClick={() => cycleStatus(uc.id, component)}
                                 title="Click to advance status"
@@ -264,13 +272,6 @@ export function ProspectCard({ prospect, onEdit }: ProspectCardProps) {
                                 >
                                   {cfg.label}
                                 </Badge>
-                              </button>
-                              <button
-                                onClick={() => startEdit(uc.id, component)}
-                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all shrink-0"
-                                title="Edit component"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
                               </button>
                               <button
                                 onClick={() => removeComponent(uc.id, component)}
