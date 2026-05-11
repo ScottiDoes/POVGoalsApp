@@ -21,7 +21,7 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
   if (session.prospect_id) {
     const { data } = await supabase
       .from("pov_prospects")
-      .select("id, org_name, use_case_snapshot, component_statuses")
+      .select("id, org_name, contact_name, main_goals, kickoff_date, end_date, use_case_snapshot, component_statuses")
       .eq("id", session.prospect_id)
       .single();
     prospect = data;

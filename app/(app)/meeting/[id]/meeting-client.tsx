@@ -5,7 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { format } from "date-fns";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, UserRound, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Database } from "@/lib/database.types";
@@ -25,6 +26,10 @@ const PAIN_POINT_COLORS: Record<string, string> = {
 interface Prospect {
   id: string;
   org_name: string;
+  contact_name: string | null;
+  main_goals: string | null;
+  kickoff_date: string | null;
+  end_date: string | null;
   use_case_snapshot: unknown;
   component_statuses: unknown;
 }
@@ -73,11 +78,7 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
     };
     setStatuses(nextStatuses);
     const supabase = createClient();
-    supabase
-      .from("pov_prospects")
-      .update({ component_statuses: nextStatuses })
-      .eq("id", prospect!.id)
-      .then(() => {});
+    supabase.from("pov_prospects").update({ component_statuses: nextStatuses }).eq("id", prospect!.id).then(() => {});
   }
 
   function toggleResonance() {
@@ -85,11 +86,7 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
     if (isResonated) next.delete(current.id); else next.add(current.id);
     setResonated(next);
     const supabase = createClient();
-    supabase
-      .from("meeting_sessions")
-      .update({ resonated_use_case_ids: [...next] })
-      .eq("id", session.id)
-      .then(() => {});
+    supabase.from("meeting_sessions").update({ resonated_use_case_ids: [...next] }).eq("id", session.id).then(() => {});
   }
 
   async function endMeeting() {
@@ -102,13 +99,12 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
   const total_count = current.components.length;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-0px)] p-6 gap-5">
+    <div className="flex flex-col h-screen p-6 gap-5">
       {/* Top bar */}
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <span className="font-semibold text-base">{prospect.org_name}</span>
           <span className="text-sm text-muted-foreground">
-            {index + 1} / {snapshot.length}
+            Use case {index + 1} of {snapshot.length}
           </span>
           <div className="flex gap-1.5">
             {snapshot.map((uc, i) => (
@@ -117,11 +113,7 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
                 onClick={() => setIndex(i)}
                 className={cn(
                   "h-2 rounded-full transition-all",
-                  i === index
-                    ? "w-6 bg-primary"
-                    : resonated.has(uc.id)
-                    ? "w-2 bg-primary/40"
-                    : "w-2 bg-muted"
+                  i === index ? "w-6 bg-primary" : resonated.has(uc.id) ? "w-2 bg-primary/40" : "w-2 bg-muted"
                 )}
                 title={uc.title}
               />
@@ -140,81 +132,98 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
         </div>
       </div>
 
-      {/* Use case card */}
+      {/* Main content */}
       <div className="flex-1 flex items-center justify-center min-h-0">
         <div className="w-full max-w-2xl flex flex-col gap-4">
-          <Card className="border-border bg-secondary/40 w-full">
-            <CardContent className="p-0">
-              {/* Use case header */}
-              <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 px-5 pt-5 pb-4">
-                <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                  <span className="font-semibold text-base">
-                    {current.title || `${current.roi_stat} ${current.roi_description}`}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[10px] font-medium",
-                      PAIN_POINT_COLORS[current.pain_point_tag] ?? "bg-muted text-muted-foreground border-border"
-                    )}
-                  >
-                    {current.pain_point_tag}
-                  </Badge>
-                </div>
-                {total_count > 0 && (
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {done_count}/{total_count} complete
-                  </span>
-                )}
-                <div />
-              </div>
 
-              {/* Components */}
-              {current.components.length > 0 && (
-                <div className="border-t border-border px-5 py-4">
-                  <div className="space-y-1.5 pl-3 border-l border-border">
-                    {current.components.map((component) => {
-                      const status = getStatus(component);
-                      const cfg = STATUS_CONFIG[status];
-                      return (
-                        <div key={component} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3">
-                          <span className={cn(
-                            "text-sm leading-snug",
-                            status === "disregarded" && "line-through text-muted-foreground/50"
-                          )}>
-                            {component}
-                          </span>
-                          <button onClick={() => cycleStatus(component)} title="Click to advance status">
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap",
-                                cfg.className
-                              )}
-                            >
-                              {cfg.label}
-                            </Badge>
-                          </button>
-                          <div />
-                        </div>
-                      );
-                    })}
-                  </div>
+          {/* Prospect info card */}
+          <Card className="border-border bg-secondary/40 w-full">
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-xl font-semibold leading-tight">{prospect.org_name}</h2>
+                  {prospect.contact_name && (
+                    <div className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground">
+                      <UserRound className="h-3.5 w-3.5 shrink-0" />
+                      {prospect.contact_name}
+                    </div>
+                  )}
+                  {prospect.main_goals && (
+                    <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                      <span className="text-foreground/60 font-medium">Goals: </span>
+                      {prospect.main_goals}
+                    </p>
+                  )}
                 </div>
-              )}
+                {(prospect.kickoff_date || prospect.end_date) && (
+                  <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground shrink-0">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    {prospect.kickoff_date && (
+                      <span>{format(new Date(prospect.kickoff_date), "MMM d")}</span>
+                    )}
+                    {prospect.end_date && (
+                      <span>→ {format(new Date(prospect.end_date), "MMM d, yyyy")}</span>
+                    )}
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
+
+          {/* Use case + components */}
+          <div className="rounded-lg border border-border bg-secondary/20 px-5 py-4">
+            {/* Use case header */}
+            <div className="grid grid-cols-[1fr_auto] items-center gap-x-3 mb-3">
+              <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                <span className="font-semibold text-base">
+                  {current.title || `${current.roi_stat} ${current.roi_description}`}
+                </span>
+                <Badge
+                  variant="outline"
+                  className={cn("text-[10px] font-medium", PAIN_POINT_COLORS[current.pain_point_tag] ?? "bg-muted text-muted-foreground border-border")}
+                >
+                  {current.pain_point_tag}
+                </Badge>
+              </div>
+              {total_count > 0 && (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {done_count}/{total_count} complete
+                </span>
+              )}
+            </div>
+
+            {/* Components */}
+            {current.components.length > 0 && (
+              <div className="space-y-1.5 pl-3 border-l border-border">
+                {current.components.map((component) => {
+                  const status = getStatus(component);
+                  const cfg = STATUS_CONFIG[status];
+                  return (
+                    <div key={component} className="grid grid-cols-[1fr_auto] items-center gap-x-3">
+                      <span className={cn("text-sm leading-snug", status === "disregarded" && "line-through text-muted-foreground/50")}>
+                        {component}
+                      </span>
+                      <button onClick={() => cycleStatus(component)} title="Click to advance status">
+                        <Badge
+                          variant="outline"
+                          className={cn("text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap", cfg.className)}
+                        >
+                          {cfg.label}
+                        </Badge>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Navigation + resonance */}
           <div className="flex items-center justify-between gap-4">
             <button
               onClick={() => setIndex((i) => Math.max(0, i - 1))}
               disabled={isFirst}
-              className={cn(
-                buttonVariants({ variant: "outline", size: "lg" }),
-                "gap-2 min-w-[120px]",
-                isFirst && "opacity-30 pointer-events-none"
-              )}
+              className={cn(buttonVariants({ variant: "outline", size: "lg" }), "gap-2 min-w-[120px]", isFirst && "opacity-30 pointer-events-none")}
             >
               <ChevronLeft className="h-5 w-5" />
               Previous
@@ -235,10 +244,7 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
 
             <button
               onClick={() => isLast ? endMeeting() : setIndex((i) => i + 1)}
-              className={cn(
-                buttonVariants({ size: "lg" }),
-                "gap-2 min-w-[120px] bg-primary text-primary-foreground hover:bg-primary/90"
-              )}
+              className={cn(buttonVariants({ size: "lg" }), "gap-2 min-w-[120px] bg-primary text-primary-foreground hover:bg-primary/90")}
             >
               {isLast ? "Finish" : "Next"}
               <ChevronRight className="h-5 w-5" />
