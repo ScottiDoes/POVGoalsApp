@@ -211,42 +211,24 @@ export function ProspectCard({ prospect, onEdit }: ProspectCardProps) {
                       const status = getStatus(uc.id, component);
                       const cfg = STATUS_CONFIG[status];
                       return (
-                        <div key={component} className="flex items-center gap-3 group">
+                        <div key={component} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 group">
+                          {/* Col 1: text + pencil */}
                           {isEditing ? (
-                            <>
-                              <input
-                                ref={editRef}
-                                type="text"
-                                value={editing.text}
-                                onChange={(e) => setEditing((s) => s ? { ...s, text: e.target.value } : s)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") saveEdit();
-                                  if (e.key === "Escape") setEditing(null);
-                                }}
-                                className="flex-1 bg-transparent text-sm outline-none border-b border-primary/60 py-0.5 transition-colors"
-                              />
-                              <button
-                                onClick={saveEdit}
-                                className={cn(
-                                  "shrink-0 transition-colors",
-                                  editing.text.trim() && editing.text.trim() !== editing.original
-                                    ? "text-primary"
-                                    : "text-muted-foreground/40 pointer-events-none"
-                                )}
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                onClick={() => setEditing(null)}
-                                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </>
+                            <input
+                              ref={editRef}
+                              type="text"
+                              value={editing.text}
+                              onChange={(e) => setEditing((s) => s ? { ...s, text: e.target.value } : s)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveEdit();
+                                if (e.key === "Escape") setEditing(null);
+                              }}
+                              className="bg-transparent text-sm outline-none border-b border-primary/60 py-0.5 transition-colors"
+                            />
                           ) : (
-                            <>
+                            <div className="flex items-center gap-1.5 min-w-0">
                               <span className={cn(
-                                "text-sm leading-snug",
+                                "text-sm leading-snug truncate",
                                 status === "disregarded" && "line-through text-muted-foreground/50"
                               )}>
                                 {component}
@@ -258,29 +240,50 @@ export function ProspectCard({ prospect, onEdit }: ProspectCardProps) {
                               >
                                 <Pencil className="h-3 w-3" />
                               </button>
-                              <div className="flex-1" />
-                              <button
-                                onClick={() => cycleStatus(uc.id, component)}
-                                title="Click to advance status"
+                            </div>
+                          )}
+                          {/* Col 2: status badge or save/cancel */}
+                          {isEditing ? (
+                            <button
+                              onClick={saveEdit}
+                              className={cn(
+                                "shrink-0 transition-colors",
+                                editing.text.trim() && editing.text.trim() !== editing.original
+                                  ? "text-primary"
+                                  : "text-muted-foreground/40 pointer-events-none"
+                              )}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </button>
+                          ) : (
+                            <button onClick={() => cycleStatus(uc.id, component)} title="Click to advance status">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap",
+                                  cfg.className
+                                )}
                               >
-                                <Badge
-                                  variant="outline"
-                                  className={cn(
-                                    "text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap",
-                                    cfg.className
-                                  )}
-                                >
-                                  {cfg.label}
-                                </Badge>
-                              </button>
-                              <button
-                                onClick={() => removeComponent(uc.id, component)}
-                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
-                                title="Remove component"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </>
+                                {cfg.label}
+                              </Badge>
+                            </button>
+                          )}
+                          {/* Col 3: X */}
+                          {isEditing ? (
+                            <button
+                              onClick={() => setEditing(null)}
+                              className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => removeComponent(uc.id, component)}
+                              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
+                              title="Remove component"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
                           )}
                         </div>
                       );
