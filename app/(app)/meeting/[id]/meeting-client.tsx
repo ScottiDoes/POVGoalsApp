@@ -6,14 +6,24 @@ import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, UserRound, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, UserRound, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Database } from "@/lib/database.types";
-import type { ComponentStatus, SnapshotUseCase } from "@/app/(app)/goals/types";
-import { STATUS_CONFIG, STATUS_CYCLE } from "@/app/(app)/goals/types";
+import type { SnapshotUseCase } from "@/app/(app)/goals/types";
 
 type Session = Database["public"]["Tables"]["meeting_sessions"]["Row"];
+
+// Importance levels — ordered descending by significance
+const IMPORTANCE_LEVELS = ["critical", "important", "nice_to_have", "not_required"] as const;
+type Importance = typeof IMPORTANCE_LEVELS[number];
+
+const IMPORTANCE_CONFIG: Record<Importance, { label: string; className: string; dotClass: string }> = {
+  critical:     { label: "Critical",      className: "bg-red-500/10 text-red-400 border-red-500/30",    dotClass: "bg-red-400" },
+  important:    { label: "Important",     className: "bg-orange/10 text-orange-400 border-orange/30",   dotClass: "bg-orange-400" },
+  nice_to_have: { label: "Nice to have",  className: "bg-blue/10 text-blue-400 border-blue/30",         dotClass: "bg-blue-400" },
+  not_required: { label: "Not required",  className: "bg-muted/60 text-muted-foreground border-border", dotClass: "bg-muted-foreground/40" },
+};
 
 const PAIN_POINT_COLORS: Record<string, string> = {
   "Revenue Growth":    "bg-teal/10 text-teal border-teal/20",
@@ -39,12 +49,74 @@ interface MeetingClientProps {
   prospect: Prospect | null;
 }
 
+function ImportanceDropdown({
+  value,
+  onChange,
+}: {
+  value: Importance | null;
+  onChange: (v: Importance) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const cfg = value ? IMPORTANCE_CONFIG[value] : null;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition-colors whitespace-nowrap",
+          cfg ? cfg.className : "bg-muted/40 text-muted-foreground/60 border-border hover:border-primary/30 hover:text-muted-foreground"
+        )}
+      >
+        {cfg && <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", cfg.dotClass)} />}
+        {cfg ? cfg.label : "Set importance"}
+        <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+      </button>
+
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          {/* Menu */}
+          <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] rounded-md border border-border bg-card shadow-lg py-1">
+            {IMPORTANCE_LEVELS.map((level) => {
+              const lcfg = IMPORTANCE_CONFIG[level];
+              return (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => { onChange(level); setOpen(false); }}
+                  className={cn(
+                    "flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left transition-colors hover:bg-muted/50",
+                    value === level ? "font-semibold" : "font-normal"
+                  )}
+                >
+                  <span className={cn("h-2 w-2 rounded-full shrink-0", lcfg.dotClass)} />
+                  <span className={cn(
+                    value === level ? lcfg.className.split(" ").find(c => c.startsWith("text-")) : "text-foreground/80"
+                  )}>
+                    {lcfg.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function MeetingClient({ session, prospect }: MeetingClientProps) {
   const router = useRouter();
   const snapshot = (prospect?.use_case_snapshot as SnapshotUseCase[]) ?? [];
   const [index, setIndex] = useState(0);
-  const [statuses, setStatuses] = useState<Record<string, Record<string, ComponentStatus>>>(
-    (prospect?.component_statuses as Record<string, Record<string, ComponentStatus>>) ?? {}
+  // importance: { ucId: { componentName: Importance } }
+  const [importance, setImportance] = useState<Record<string, Record<string, Importance>>>(
+    (session.component_importance as Record<string, Record<string, Importance>>) ?? {}
   );
   const [resonated, setResonated] = useState<Set<string>>(
     new Set(session.resonated_use_case_ids ?? [])
@@ -65,20 +137,14 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
   const isLast = index === snapshot.length - 1;
   const isResonated = resonated.has(current.id);
 
-  function getStatus(component: string): ComponentStatus {
-    return statuses[current.id]?.[component] ?? "not_started";
-  }
-
-  function cycleStatus(component: string) {
-    const curr = getStatus(component);
-    const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(curr) + 1) % STATUS_CYCLE.length];
-    const nextStatuses = {
-      ...statuses,
-      [current.id]: { ...(statuses[current.id] ?? {}), [component]: next },
+  function setComponentImportance(component: string, level: Importance) {
+    const next = {
+      ...importance,
+      [current.id]: { ...(importance[current.id] ?? {}), [component]: level },
     };
-    setStatuses(nextStatuses);
+    setImportance(next);
     const supabase = createClient();
-    supabase.from("pov_prospects").update({ component_statuses: nextStatuses }).eq("id", prospect!.id).then(() => {});
+    supabase.from("meeting_sessions").update({ component_importance: next }).eq("id", session.id).then(() => {});
   }
 
   function toggleResonance() {
@@ -94,9 +160,6 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
     await supabase.from("meeting_sessions").update({ status: "ended" }).eq("id", session.id);
     router.push(`/meeting/${session.id}/summary`);
   }
-
-  const done_count = current.components.filter((c) => getStatus(c) === "complete").length;
-  const total_count = current.components.length;
 
   return (
     <div className="flex flex-col h-screen p-6 gap-5">
@@ -158,12 +221,8 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
                 {(prospect.kickoff_date || prospect.end_date) && (
                   <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground shrink-0">
                     <CalendarDays className="h-3.5 w-3.5" />
-                    {prospect.kickoff_date && (
-                      <span>{format(new Date(prospect.kickoff_date), "MMM d")}</span>
-                    )}
-                    {prospect.end_date && (
-                      <span>→ {format(new Date(prospect.end_date), "MMM d, yyyy")}</span>
-                    )}
+                    {prospect.kickoff_date && <span>{format(new Date(prospect.kickoff_date), "MMM d")}</span>}
+                    {prospect.end_date && <span>→ {format(new Date(prospect.end_date), "MMM d, yyyy")}</span>}
                   </div>
                 )}
               </div>
@@ -173,44 +232,30 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
           {/* Use case + components */}
           <div className="rounded-lg border border-border bg-secondary/20 px-5 py-4">
             {/* Use case header */}
-            <div className="grid grid-cols-[1fr_auto] items-center gap-x-3 mb-3">
-              <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                <span className="font-semibold text-base">
-                  {current.title || `${current.roi_stat} ${current.roi_description}`}
-                </span>
-                <Badge
-                  variant="outline"
-                  className={cn("text-[10px] font-medium", PAIN_POINT_COLORS[current.pain_point_tag] ?? "bg-muted text-muted-foreground border-border")}
-                >
-                  {current.pain_point_tag}
-                </Badge>
-              </div>
-              {total_count > 0 && (
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  {done_count}/{total_count} complete
-                </span>
-              )}
+            <div className="flex items-center gap-2 flex-wrap mb-3">
+              <span className="font-semibold text-base">
+                {current.title || `${current.roi_stat} ${current.roi_description}`}
+              </span>
+              <Badge
+                variant="outline"
+                className={cn("text-[10px] font-medium", PAIN_POINT_COLORS[current.pain_point_tag] ?? "bg-muted text-muted-foreground border-border")}
+              >
+                {current.pain_point_tag}
+              </Badge>
             </div>
 
             {/* Components */}
             {current.components.length > 0 && (
-              <div className="space-y-1.5 pl-3 border-l border-border">
+              <div className="space-y-2 pl-3 border-l border-border">
                 {current.components.map((component) => {
-                  const status = getStatus(component);
-                  const cfg = STATUS_CONFIG[status];
+                  const level = importance[current.id]?.[component] ?? null;
                   return (
                     <div key={component} className="grid grid-cols-[1fr_auto] items-center gap-x-3">
-                      <span className={cn("text-sm leading-snug", status === "disregarded" && "line-through text-muted-foreground/50")}>
-                        {component}
-                      </span>
-                      <button onClick={() => cycleStatus(component)} title="Click to advance status">
-                        <Badge
-                          variant="outline"
-                          className={cn("text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap", cfg.className)}
-                        >
-                          {cfg.label}
-                        </Badge>
-                      </button>
+                      <span className="text-sm leading-snug">{component}</span>
+                      <ImportanceDropdown
+                        value={level}
+                        onChange={(v) => setComponentImportance(component, v)}
+                      />
                     </div>
                   );
                 })}

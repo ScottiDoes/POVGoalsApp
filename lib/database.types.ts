@@ -106,6 +106,7 @@ export type Database = {
       }
       meeting_sessions: {
         Row: {
+          component_importance: Json
           consultant_id: string
           created_at: string
           id: string
@@ -119,6 +120,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          component_importance?: Json
           consultant_id: string
           created_at?: string
           id?: string
@@ -132,6 +134,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          component_importance?: Json
           consultant_id?: string
           created_at?: string
           id?: string
