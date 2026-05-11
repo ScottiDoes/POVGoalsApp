@@ -1,24 +1,18 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, ChevronLeft, ChevronRight, Library } from "lucide-react";
-import Link from "next/link";
+import { CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Database } from "@/lib/database.types";
+import type { ComponentStatus, SnapshotUseCase } from "@/app/(app)/goals/types";
+import { STATUS_CONFIG, STATUS_CYCLE } from "@/app/(app)/goals/types";
 
 type Session = Database["public"]["Tables"]["meeting_sessions"]["Row"];
-type UseCase = {
-  id: string;
-  pain_point_tag: string;
-  roi_stat: string;
-  roi_description: string;
-  before_text: string;
-  after_text: string;
-};
 
 const PAIN_POINT_COLORS: Record<string, string> = {
   "Revenue Growth":    "bg-teal/10 text-teal border-teal/20",
@@ -28,52 +22,67 @@ const PAIN_POINT_COLORS: Record<string, string> = {
   "Customer Success":  "bg-green/10 text-green-400 border-green/20",
 };
 
-function tagColor(tag: string) {
-  return PAIN_POINT_COLORS[tag] ?? "bg-muted text-muted-foreground border-border";
+interface Prospect {
+  id: string;
+  org_name: string;
+  use_case_snapshot: unknown;
+  component_statuses: unknown;
 }
 
 interface MeetingClientProps {
   session: Session;
-  useCases: UseCase[];
+  prospect: Prospect | null;
 }
 
-export function MeetingClient({ session, useCases }: MeetingClientProps) {
+export function MeetingClient({ session, prospect }: MeetingClientProps) {
   const router = useRouter();
+  const snapshot = (prospect?.use_case_snapshot as SnapshotUseCase[]) ?? [];
   const [index, setIndex] = useState(0);
+  const [statuses, setStatuses] = useState<Record<string, Record<string, ComponentStatus>>>(
+    (prospect?.component_statuses as Record<string, Record<string, ComponentStatus>>) ?? {}
+  );
   const [resonated, setResonated] = useState<Set<string>>(
     new Set(session.resonated_use_case_ids ?? [])
   );
 
-  if (useCases.length === 0) {
+  if (!prospect || snapshot.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-[80vh] text-center p-8">
-        <Library className="h-12 w-12 text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold mb-2">No use cases in your library</h2>
-        <p className="text-muted-foreground text-sm mb-6">
-          Add use cases to your library before running a meeting.
+        <p className="text-muted-foreground text-sm">
+          No use cases found for this prospect. Add some in POV Progress first.
         </p>
-        <Link
-          href="/library"
-          className={cn(buttonVariants(), "bg-primary text-primary-foreground hover:bg-primary/90")}
-        >
-          Go to Library
-        </Link>
       </div>
     );
   }
 
-  const current = useCases[index];
-  const isResonated = resonated.has(current.id);
+  const current = snapshot[index];
   const isFirst = index === 0;
-  const isLast = index === useCases.length - 1;
+  const isLast = index === snapshot.length - 1;
+  const isResonated = resonated.has(current.id);
+
+  function getStatus(component: string): ComponentStatus {
+    return statuses[current.id]?.[component] ?? "not_started";
+  }
+
+  function cycleStatus(component: string) {
+    const curr = getStatus(component);
+    const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(curr) + 1) % STATUS_CYCLE.length];
+    const nextStatuses = {
+      ...statuses,
+      [current.id]: { ...(statuses[current.id] ?? {}), [component]: next },
+    };
+    setStatuses(nextStatuses);
+    const supabase = createClient();
+    supabase
+      .from("pov_prospects")
+      .update({ component_statuses: nextStatuses })
+      .eq("id", prospect!.id)
+      .then(() => {});
+  }
 
   function toggleResonance() {
     const next = new Set(resonated);
-    if (isResonated) {
-      next.delete(current.id);
-    } else {
-      next.add(current.id);
-    }
+    if (isResonated) next.delete(current.id); else next.add(current.id);
     setResonated(next);
     const supabase = createClient();
     supabase
@@ -83,29 +92,22 @@ export function MeetingClient({ session, useCases }: MeetingClientProps) {
       .then(() => {});
   }
 
-  function prev() {
-    setIndex((i) => Math.max(0, i - 1));
-  }
+  const done = () => router.push(`/meeting/${session.id}/summary`);
 
-  function next() {
-    setIndex((i) => Math.min(useCases.length - 1, i + 1));
-  }
-
-  function done() {
-    router.push(`/meeting/${session.id}/summary`);
-  }
+  const done_count = current.components.filter((c) => getStatus(c) === "complete").length;
+  const total_count = current.components.length;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-0px)] p-6 gap-6">
+    <div className="flex flex-col h-[calc(100vh-0px)] p-6 gap-5">
       {/* Top bar */}
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground font-medium">
-            {index + 1} / {useCases.length}
+          <span className="font-semibold text-base">{prospect.org_name}</span>
+          <span className="text-sm text-muted-foreground">
+            {index + 1} / {snapshot.length}
           </span>
-          {/* Progress dots */}
           <div className="flex gap-1.5">
-            {useCases.map((uc, i) => (
+            {snapshot.map((uc, i) => (
               <button
                 key={uc.id}
                 onClick={() => setIndex(i)}
@@ -117,21 +119,16 @@ export function MeetingClient({ session, useCases }: MeetingClientProps) {
                     ? "w-2 bg-primary/40"
                     : "w-2 bg-muted"
                 )}
-                title={`Use case ${i + 1}`}
+                title={uc.title}
               />
             ))}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            {resonated.size} resonated
-          </span>
+          <span className="text-xs text-muted-foreground">{resonated.size} resonated</span>
           <button
             onClick={done}
-            className={cn(
-              buttonVariants({ size: "sm" }),
-              "bg-primary text-primary-foreground hover:bg-primary/90"
-            )}
+            className={cn(buttonVariants({ size: "sm" }), "bg-primary text-primary-foreground hover:bg-primary/90")}
           >
             Done
           </button>
@@ -140,47 +137,73 @@ export function MeetingClient({ session, useCases }: MeetingClientProps) {
 
       {/* Use case card */}
       <div className="flex-1 flex items-center justify-center min-h-0">
-        <div className="w-full max-w-3xl">
-          {/* Tag */}
-          <div className="flex justify-center mb-6">
-            <Badge
-              variant="outline"
-              className={cn("text-sm font-medium px-4 py-1", tagColor(current.pain_point_tag))}
-            >
-              {current.pain_point_tag}
-            </Badge>
-          </div>
+        <div className="w-full max-w-2xl flex flex-col gap-4">
+          <Card className="border-border bg-secondary/40 w-full">
+            <CardContent className="p-0">
+              {/* Use case header */}
+              <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 px-5 pt-5 pb-4">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                  <span className="font-semibold text-base">
+                    {current.title || `${current.roi_stat} ${current.roi_description}`}
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[10px] font-medium",
+                      PAIN_POINT_COLORS[current.pain_point_tag] ?? "bg-muted text-muted-foreground border-border"
+                    )}
+                  >
+                    {current.pain_point_tag}
+                  </Badge>
+                </div>
+                {total_count > 0 && (
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {done_count}/{total_count} complete
+                  </span>
+                )}
+                <div />
+              </div>
 
-          {/* ROI */}
-          <div className="text-center mb-8">
-            <p className="text-7xl font-bold text-primary leading-none mb-2">
-              {current.roi_stat}
-            </p>
-            {current.roi_description && (
-              <p className="text-xl text-muted-foreground">{current.roi_description}</p>
-            )}
-          </div>
+              {/* Components */}
+              {current.components.length > 0 && (
+                <div className="border-t border-border px-5 py-4">
+                  <div className="space-y-1.5 pl-3 border-l border-border">
+                    {current.components.map((component) => {
+                      const status = getStatus(component);
+                      const cfg = STATUS_CONFIG[status];
+                      return (
+                        <div key={component} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3">
+                          <span className={cn(
+                            "text-sm leading-snug",
+                            status === "disregarded" && "line-through text-muted-foreground/50"
+                          )}>
+                            {component}
+                          </span>
+                          <button onClick={() => cycleStatus(component)} title="Click to advance status">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap",
+                                cfg.className
+                              )}
+                            >
+                              {cfg.label}
+                            </Badge>
+                          </button>
+                          <div />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-          {/* Before / After */}
-          <div className="grid grid-cols-2 gap-4 mb-8">
-            <div className="rounded-xl bg-muted/50 p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
-                Before
-              </p>
-              <p className="text-base leading-relaxed">{current.before_text}</p>
-            </div>
-            <div className="rounded-xl bg-primary/5 border border-primary/15 p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-primary/60 mb-3">
-                After
-              </p>
-              <p className="text-base leading-relaxed">{current.after_text}</p>
-            </div>
-          </div>
-
-          {/* Navigation + Resonance */}
+          {/* Navigation + resonance */}
           <div className="flex items-center justify-between gap-4">
             <button
-              onClick={prev}
+              onClick={() => setIndex((i) => Math.max(0, i - 1))}
               disabled={isFirst}
               className={cn(
                 buttonVariants({ variant: "outline", size: "lg" }),
@@ -201,20 +224,18 @@ export function MeetingClient({ session, useCases }: MeetingClientProps) {
                   : "bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
               )}
             >
-              <CheckCircle2 className={cn("h-5 w-5", isResonated ? "fill-primary-foreground" : "")} />
+              <CheckCircle2 className={cn("h-5 w-5", isResonated && "fill-primary-foreground")} />
               {isResonated ? "Resonated!" : "This resonates"}
             </button>
 
             <button
-              onClick={next}
-              disabled={isLast}
+              onClick={() => isLast ? done() : setIndex((i) => i + 1)}
               className={cn(
                 buttonVariants({ size: "lg" }),
-                "gap-2 min-w-[120px] bg-primary text-primary-foreground hover:bg-primary/90",
-                isLast && "opacity-30 pointer-events-none"
+                "gap-2 min-w-[120px] bg-primary text-primary-foreground hover:bg-primary/90"
               )}
             >
-              Next
+              {isLast ? "Finish" : "Next"}
               <ChevronRight className="h-5 w-5" />
             </button>
           </div>

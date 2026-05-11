@@ -7,26 +7,30 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const [{ data: session }, { data: useCases }] = await Promise.all([
-    supabase
-      .from("meeting_sessions")
-      .select("*")
-      .eq("id", id)
-      .eq("consultant_id", user!.id)
-      .single(),
-    supabase
-      .from("use_cases_consultant")
-      .select("id, pain_point_tag, roi_stat, roi_description, before_text, after_text")
-      .eq("consultant_id", user!.id)
-      .eq("is_hidden", false),
-  ]);
+  const { data: session } = await supabase
+    .from("meeting_sessions")
+    .select("*")
+    .eq("id", id)
+    .eq("consultant_id", user!.id)
+    .single();
 
   if (!session) redirect("/home");
+
+  // Fetch prospect snapshot if this session is linked to one
+  let prospect = null;
+  if (session.prospect_id) {
+    const { data } = await supabase
+      .from("pov_prospects")
+      .select("id, org_name, use_case_snapshot, component_statuses")
+      .eq("id", session.prospect_id)
+      .single();
+    prospect = data;
+  }
 
   return (
     <MeetingClient
       session={session}
-      useCases={useCases ?? []}
+      prospect={prospect}
     />
   );
 }
