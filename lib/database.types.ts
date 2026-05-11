@@ -116,6 +116,7 @@ export type Database = {
           prospect_id: string | null
           prospect_name: string | null
           resonated_use_case_ids: string[]
+          status: string
         }
         Insert: {
           consultant_id: string
@@ -128,6 +129,7 @@ export type Database = {
           prospect_id?: string | null
           prospect_name?: string | null
           resonated_use_case_ids?: string[]
+          status?: string
         }
         Update: {
           consultant_id?: string
@@ -140,6 +142,7 @@ export type Database = {
           prospect_id?: string | null
           prospect_name?: string | null
           resonated_use_case_ids?: string[]
+          status?: string
         }
         Relationships: [
           {

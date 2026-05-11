@@ -7,16 +7,17 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { LogOut, Play } from "lucide-react";
+import { LogOut, Play, Radio } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 interface SidebarProps {
   userName: string;
   userEmail: string;
+  activeMeetingId: string | null;
 }
 
-export function Sidebar({ userName, userEmail }: SidebarProps) {
+export function Sidebar({ userName, userEmail, activeMeetingId }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -49,18 +50,31 @@ export function Sidebar({ userName, userEmail }: SidebarProps) {
       </div>
 
       <ScrollArea className="flex-1">
-        {/* Start New Meeting CTA */}
+        {/* Meeting CTA */}
         <div className="px-3 pt-4 pb-2">
-          <Link
-            href="/meeting/new"
-            className={cn(
-              buttonVariants(),
-              "w-full bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-medium justify-center"
-            )}
-          >
-            <Play className="h-4 w-4" />
-            Start Meeting
-          </Link>
+          {activeMeetingId ? (
+            <Link
+              href={`/meeting/${activeMeetingId}`}
+              className={cn(
+                buttonVariants(),
+                "w-full bg-orange-500 text-white hover:bg-orange-500/90 gap-2 font-medium justify-center"
+              )}
+            >
+              <Radio className="h-4 w-4 animate-pulse" />
+              In Progress
+            </Link>
+          ) : (
+            <Link
+              href="/meeting/new"
+              className={cn(
+                buttonVariants(),
+                "w-full bg-primary text-primary-foreground hover:bg-primary/90 gap-2 font-medium justify-center"
+              )}
+            >
+              <Play className="h-4 w-4" />
+              Start Meeting
+            </Link>
+          )}
         </div>
 
         <Separator className="my-3 bg-border" />

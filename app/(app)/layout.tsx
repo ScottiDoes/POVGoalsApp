@@ -8,18 +8,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("name, email")
-    .eq("id", user.id)
-    .single();
+  const [{ data: profile }, { data: activeMeeting }] = await Promise.all([
+    supabase.from("profiles").select("name, email").eq("id", user.id).single(),
+    supabase
+      .from("meeting_sessions")
+      .select("id")
+      .eq("consultant_id", user.id)
+      .eq("status", "active")
+      .not("prospect_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   const userName = profile?.name ?? user.email?.split("@")[0] ?? "Consultant";
   const userEmail = profile?.email ?? user.email ?? "";
 
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar userName={userName} userEmail={userEmail} />
+      <Sidebar userName={userName} userEmail={userEmail} activeMeetingId={activeMeeting?.id ?? null} />
       <main className="flex-1 ml-[240px] overflow-y-auto">
         {children}
       </main>

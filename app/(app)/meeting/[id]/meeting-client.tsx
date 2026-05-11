@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Database } from "@/lib/database.types";
@@ -92,7 +92,11 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
       .then(() => {});
   }
 
-  const done = () => router.push(`/meeting/${session.id}/summary`);
+  async function endMeeting() {
+    const supabase = createClient();
+    await supabase.from("meeting_sessions").update({ status: "ended" }).eq("id", session.id);
+    router.push(`/meeting/${session.id}/summary`);
+  }
 
   const done_count = current.components.filter((c) => getStatus(c) === "complete").length;
   const total_count = current.components.length;
@@ -127,10 +131,11 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">{resonated.size} resonated</span>
           <button
-            onClick={done}
-            className={cn(buttonVariants({ size: "sm" }), "bg-primary text-primary-foreground hover:bg-primary/90")}
+            onClick={endMeeting}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive")}
           >
-            Done
+            <X className="h-3.5 w-3.5" />
+            End Meeting
           </button>
         </div>
       </div>
@@ -229,7 +234,7 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
             </button>
 
             <button
-              onClick={() => isLast ? done() : setIndex((i) => i + 1)}
+              onClick={() => isLast ? endMeeting() : setIndex((i) => i + 1)}
               className={cn(
                 buttonVariants({ size: "lg" }),
                 "gap-2 min-w-[120px] bg-primary text-primary-foreground hover:bg-primary/90"
