@@ -189,6 +189,59 @@ export type Database = {
           },
         ]
       }
+      pov_prospects: {
+        Row: {
+          component_statuses: Json
+          consultant_id: string
+          contact_name: string | null
+          created_at: string
+          end_date: string | null
+          id: string
+          kickoff_date: string | null
+          linked_use_case_ids: string[]
+          main_goals: string | null
+          org_name: string
+          updated_at: string
+          use_case_snapshot: Json
+        }
+        Insert: {
+          component_statuses?: Json
+          consultant_id: string
+          contact_name?: string | null
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          kickoff_date?: string | null
+          linked_use_case_ids?: string[]
+          main_goals?: string | null
+          org_name: string
+          updated_at?: string
+          use_case_snapshot?: Json
+        }
+        Update: {
+          component_statuses?: Json
+          consultant_id?: string
+          contact_name?: string | null
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          kickoff_date?: string | null
+          linked_use_case_ids?: string[]
+          main_goals?: string | null
+          org_name?: string
+          updated_at?: string
+          use_case_snapshot?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pov_prospects_consultant_id_fkey"
+            columns: ["consultant_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -328,6 +381,12 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
     }
     Enums: {
+      component_status:
+        | "not_started"
+        | "in_progress"
+        | "demo_approved"
+        | "complete"
+        | "disregarded"
       goal_status: "not_started" | "in_progress" | "achieved"
       next_step_type:
         | "technical_deep_dive"
@@ -466,6 +525,13 @@ export const Constants = {
   },
   public: {
     Enums: {
+      component_status: [
+        "not_started",
+        "in_progress",
+        "demo_approved",
+        "complete",
+        "disregarded",
+      ],
       goal_status: ["not_started", "in_progress", "achieved"],
       next_step_type: [
         "technical_deep_dive",
