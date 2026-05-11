@@ -183,25 +183,26 @@ export function ProspectCard({ prospect, onEdit }: ProspectCardProps) {
               const draft = drafts[uc.id];
               return (
                 <div key={uc.id}>
-                  {/* Use case header */}
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <span className="font-medium text-sm">
-                      {uc.title || `${uc.roi_stat} ${uc.roi_description}`}
-                    </span>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[10px] font-medium",
-                        PAIN_POINT_COLORS[uc.pain_point_tag] ?? "bg-muted text-muted-foreground border-border"
-                      )}
-                    >
-                      {uc.pain_point_tag}
-                    </Badge>
-                    {progress && (
-                      <span className="ml-auto text-xs text-muted-foreground shrink-0">
-                        {progress.done}/{progress.total} complete
+                  {/* Use case header — same 3-col grid as component rows so columns align */}
+                  <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 mb-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                      <span className="font-medium text-sm">
+                        {uc.title || `${uc.roi_stat} ${uc.roi_description}`}
                       </span>
-                    )}
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] font-medium",
+                          PAIN_POINT_COLORS[uc.pain_point_tag] ?? "bg-muted text-muted-foreground border-border"
+                        )}
+                      >
+                        {uc.pain_point_tag}
+                      </Badge>
+                    </div>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {progress ? `${progress.done}/${progress.total} complete` : ""}
+                    </span>
+                    <div /> {/* placeholder for X column */}
                   </div>
 
                   {/* Components */}
