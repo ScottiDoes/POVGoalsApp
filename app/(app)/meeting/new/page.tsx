@@ -40,7 +40,7 @@ export default async function NewMeetingPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">Start a meeting</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Pick a prospect from your POV tracker, or enter details manually.
+          Select a prospect from your POV tracker to begin.
         </p>
       </div>
 
