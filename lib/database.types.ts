@@ -113,6 +113,7 @@ export type Database = {
           next_step_other: string | null
           notes: string | null
           prospect_company: string | null
+          prospect_id: string | null
           prospect_name: string | null
           resonated_use_case_ids: string[]
         }
@@ -124,6 +125,7 @@ export type Database = {
           next_step_other?: string | null
           notes?: string | null
           prospect_company?: string | null
+          prospect_id?: string | null
           prospect_name?: string | null
           resonated_use_case_ids?: string[]
         }
@@ -135,6 +137,7 @@ export type Database = {
           next_step_other?: string | null
           notes?: string | null
           prospect_company?: string | null
+          prospect_id?: string | null
           prospect_name?: string | null
           resonated_use_case_ids?: string[]
         }
@@ -144,6 +147,13 @@ export type Database = {
             columns: ["consultant_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_sessions_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "pov_prospects"
             referencedColumns: ["id"]
           },
         ]
