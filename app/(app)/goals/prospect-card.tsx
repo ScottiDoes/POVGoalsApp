@@ -39,6 +39,10 @@ export function ProspectCard({ prospect, onEdit }: ProspectCardProps) {
   const [drafts, setDrafts] = useState<Record<string, string | null>>({});
   const draftRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  // Inline component edit: { ucId, original, text } | null
+  const [editing, setEditing] = useState<{ ucId: string; original: string; text: string } | null>(null);
+  const editRef = useRef<HTMLInputElement | null>(null);
+
   async function persistSnapshot(next: SnapshotUseCase[]) {
     const supabase = createClient();
     await supabase.from("pov_prospects").update({ use_case_snapshot: next }).eq("id", prospect.id);
@@ -78,6 +82,34 @@ export function ProspectCard({ prospect, onEdit }: ProspectCardProps) {
     setSnapshot(next);
     setDrafts((d) => ({ ...d, [ucId]: null }));
     persistSnapshot(next);
+  }
+
+  function startEdit(ucId: string, component: string) {
+    setEditing({ ucId, original: component, text: component });
+    setTimeout(() => editRef.current?.focus(), 0);
+  }
+
+  function saveEdit() {
+    if (!editing) return;
+    const { ucId, original, text } = editing;
+    const trimmed = text.trim();
+    if (!trimmed || trimmed === original) { setEditing(null); return; }
+    const next = snapshot.map((uc) =>
+      uc.id === ucId
+        ? { ...uc, components: uc.components.map((c) => (c === original ? trimmed : c)) }
+        : uc
+    );
+    // Migrate status key to new name
+    const nextStatuses = { ...statuses };
+    if (nextStatuses[ucId]?.[original] !== undefined) {
+      const { [original]: val, ...rest } = nextStatuses[ucId];
+      nextStatuses[ucId] = { ...rest, [trimmed]: val };
+    }
+    setSnapshot(next);
+    setStatuses(nextStatuses);
+    setEditing(null);
+    persistSnapshot(next);
+    persistStatuses(nextStatuses);
   }
 
   function removeComponent(ucId: string, component: string) {
@@ -175,37 +207,80 @@ export function ProspectCard({ prospect, onEdit }: ProspectCardProps) {
                   {/* Components */}
                   <div className="space-y-1.5 pl-3 border-l border-border">
                     {uc.components.map((component) => {
+                      const isEditing = editing?.ucId === uc.id && editing.original === component;
                       const status = getStatus(uc.id, component);
                       const cfg = STATUS_CONFIG[status];
                       return (
                         <div key={component} className="flex items-center gap-3 group">
-                          <span className={cn(
-                            "text-sm flex-1 leading-snug",
-                            status === "disregarded" && "line-through text-muted-foreground/50"
-                          )}>
-                            {component}
-                          </span>
-                          <button
-                            onClick={() => cycleStatus(uc.id, component)}
-                            title="Click to advance status"
-                          >
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap",
-                                cfg.className
-                              )}
-                            >
-                              {cfg.label}
-                            </Badge>
-                          </button>
-                          <button
-                            onClick={() => removeComponent(uc.id, component)}
-                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
-                            title="Remove component"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
+                          {isEditing ? (
+                            <>
+                              <input
+                                ref={editRef}
+                                type="text"
+                                value={editing.text}
+                                onChange={(e) => setEditing((s) => s ? { ...s, text: e.target.value } : s)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") saveEdit();
+                                  if (e.key === "Escape") setEditing(null);
+                                }}
+                                className="flex-1 bg-transparent text-sm outline-none border-b border-primary/60 py-0.5 transition-colors"
+                              />
+                              <button
+                                onClick={saveEdit}
+                                className={cn(
+                                  "shrink-0 transition-colors",
+                                  editing.text.trim() && editing.text.trim() !== editing.original
+                                    ? "text-primary"
+                                    : "text-muted-foreground/40 pointer-events-none"
+                                )}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setEditing(null)}
+                                className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span className={cn(
+                                "text-sm flex-1 leading-snug",
+                                status === "disregarded" && "line-through text-muted-foreground/50"
+                              )}>
+                                {component}
+                              </span>
+                              <button
+                                onClick={() => cycleStatus(uc.id, component)}
+                                title="Click to advance status"
+                              >
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity whitespace-nowrap",
+                                    cfg.className
+                                  )}
+                                >
+                                  {cfg.label}
+                                </Badge>
+                              </button>
+                              <button
+                                onClick={() => startEdit(uc.id, component)}
+                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all shrink-0"
+                                title="Edit component"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => removeComponent(uc.id, component)}
+                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
+                                title="Remove component"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       );
                     })}
