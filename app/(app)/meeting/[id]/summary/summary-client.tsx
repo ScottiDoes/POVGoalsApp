@@ -5,13 +5,16 @@ import { buttonVariants } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { Check, ClipboardCopy } from "lucide-react";
+import { Check, ClipboardCopy, Cloud, Download, ImageOff, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Database } from "@/lib/database.types";
 
 type Session = Database["public"]["Tables"]["meeting_sessions"]["Row"];
 type NextStepType = Database["public"]["Enums"]["next_step_type"];
+type ArtifactRow = Database["public"]["Tables"]["component_artifacts"]["Row"];
+
+type ArtifactWithUrl = ArtifactRow & { url: string };
 
 type UseCase = {
   id: string;
@@ -45,16 +48,32 @@ function tagColor(tag: string) {
 interface SummaryClientProps {
   session: Session;
   resonatedUseCases: UseCase[];
+  artifacts: ArtifactRow[];
   readOnly: boolean;
 }
 
-export function SummaryClient({ session, resonatedUseCases, readOnly }: SummaryClientProps) {
+export function SummaryClient({ session, resonatedUseCases, artifacts, readOnly }: SummaryClientProps) {
   const router = useRouter();
   const [nextStep, setNextStep] = useState<NextStepType | null>(session.next_step ?? null);
   const [nextStepOther, setNextStepOther] = useState(session.next_step_other ?? "");
   const [notes, setNotes] = useState(session.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(!readOnly);
+  const [artifactsWithUrls, setArtifactsWithUrls] = useState<ArtifactWithUrl[]>([]);
+
+  useEffect(() => {
+    if (artifacts.length === 0) return;
+    const supabase = createClient();
+    Promise.all(
+      artifacts.map(async (a) => {
+        const { data } = await supabase.storage
+          .from("artifacts")
+          .createSignedUrl(a.storage_path, 3600);
+        return { ...a, url: data?.signedUrl ?? "" };
+      })
+    ).then(setArtifactsWithUrls);
+  }, [artifacts]);
 
   const prospectLabel = session.prospect_name
     ? `${session.prospect_name}${session.prospect_company ? ` · ${session.prospect_company}` : ""}`
@@ -115,7 +134,18 @@ export function SummaryClient({ session, resonatedUseCases, readOnly }: SummaryC
     <div className="p-8 max-w-2xl">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Meeting Summary</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Meeting Summary</h1>
+          {readOnly && (
+            <button
+              onClick={() => setEditing((e) => !e)}
+              className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded"
+              title={editing ? "Cancel editing" : "Edit summary"}
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          )}
+        </div>
         <p className="text-muted-foreground mt-1 text-sm">{prospectLabel}</p>
       </div>
 
@@ -149,12 +179,47 @@ export function SummaryClient({ session, resonatedUseCases, readOnly }: SummaryC
         )}
       </section>
 
+      {/* Artifacts */}
+      {artifactsWithUrls.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+            Screenshots ({artifactsWithUrls.length})
+          </h2>
+          <div className="flex flex-wrap gap-3">
+            {artifactsWithUrls.map((a) => (
+              <div key={a.id} className="group relative w-32">
+                <div className="relative rounded-md overflow-hidden border border-border aspect-video bg-muted">
+                  {a.url ? (
+                    <img src={a.url} alt={a.note ?? "Screenshot"} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <ImageOff className="h-5 w-5 text-muted-foreground/40" />
+                    </div>
+                  )}
+                  {/* Download on hover */}
+                  <a
+                    href={a.url}
+                    download
+                    className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                  >
+                    <Download className="h-5 w-5 text-white" />
+                  </a>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground truncate">
+                  {a.note || a.component_name}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Next step */}
       <section className="mb-8">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
           Next Step
         </h2>
-        {readOnly ? (
+        {!editing ? (
           <p className="text-sm">
             {nextStep
               ? NEXT_STEPS.find((s) => s.value === nextStep)?.label
@@ -179,7 +244,7 @@ export function SummaryClient({ session, resonatedUseCases, readOnly }: SummaryC
             ))}
           </div>
         )}
-        {!readOnly && nextStep === "other" && (
+        {editing && nextStep === "other" && (
           <input
             type="text"
             placeholder="Describe the next step…"
@@ -195,7 +260,7 @@ export function SummaryClient({ session, resonatedUseCases, readOnly }: SummaryC
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
           Notes
         </h2>
-        {readOnly ? (
+        {!editing ? (
           <p className="text-sm whitespace-pre-wrap">
             {notes || <span className="text-muted-foreground">No notes.</span>}
           </p>
@@ -212,6 +277,18 @@ export function SummaryClient({ session, resonatedUseCases, readOnly }: SummaryC
       {/* Actions */}
       <div className="flex items-center gap-3">
         <button
+          disabled
+          title="Salesforce integration coming soon"
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "gap-2 opacity-40 cursor-not-allowed"
+          )}
+        >
+          <Cloud className="h-4 w-4" />
+          Send to Salesforce
+        </button>
+
+        <button
           onClick={handleCopy}
           className={cn(
             buttonVariants({ variant: "outline" }),
@@ -222,7 +299,7 @@ export function SummaryClient({ session, resonatedUseCases, readOnly }: SummaryC
           {copied ? "Copied!" : "Copy summary"}
         </button>
 
-        {!readOnly && (
+        {editing && (
           <button
             onClick={handleFinish}
             disabled={saving}
@@ -231,7 +308,7 @@ export function SummaryClient({ session, resonatedUseCases, readOnly }: SummaryC
               "bg-primary text-primary-foreground hover:bg-primary/90 ml-auto"
             )}
           >
-            {saving ? "Saving…" : "Finish & save"}
+            {saving ? "Saving…" : readOnly ? "Save changes" : "Finish & save"}
           </button>
         )}
       </div>

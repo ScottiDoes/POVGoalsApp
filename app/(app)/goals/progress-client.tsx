@@ -12,9 +12,11 @@ interface ProgressClientProps {
   prospects: Prospect[];
   useCases: UseCase[];
   consultantId: string;
+  importanceByProspect: Record<string, Record<string, Record<string, string>>>;
+  sessionIdByProspect: Record<string, string>;
 }
 
-export function ProgressClient({ prospects, useCases, consultantId }: ProgressClientProps) {
+export function ProgressClient({ prospects, useCases, consultantId, importanceByProspect, sessionIdByProspect }: ProgressClientProps) {
   const router = useRouter();
   const [editingProspect, setEditingProspect] = useState<Prospect | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -76,6 +78,8 @@ export function ProgressClient({ prospects, useCases, consultantId }: ProgressCl
             <ProspectCard
               key={p.id}
               prospect={p}
+              importance={importanceByProspect[p.id] ?? {}}
+              importanceSessionId={sessionIdByProspect[p.id]}
               onEdit={() => openEdit(p)}
             />
           ))}

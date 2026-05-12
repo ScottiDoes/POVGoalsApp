@@ -31,6 +31,7 @@ export default async function MeetingPage({ params }: { params: Promise<{ id: st
     <MeetingClient
       session={session}
       prospect={prospect}
+      meetingType={session.meeting_type}
     />
   );
 }

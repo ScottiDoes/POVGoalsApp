@@ -6,11 +6,12 @@ import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, UserRound, X } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, UserRound, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import type { Database } from "@/lib/database.types";
 import type { SnapshotUseCase } from "@/app/(app)/goals/types";
+import { ArtifactPanel } from "./artifact-panel";
 
 type Session = Database["public"]["Tables"]["meeting_sessions"]["Row"];
 
@@ -47,6 +48,7 @@ interface Prospect {
 interface MeetingClientProps {
   session: Session;
   prospect: Prospect | null;
+  meetingType: "kickoff" | "continuation";
 }
 
 function ImportanceDropdown({
@@ -110,7 +112,7 @@ function ImportanceDropdown({
   );
 }
 
-export function MeetingClient({ session, prospect }: MeetingClientProps) {
+export function MeetingClient({ session, prospect, meetingType }: MeetingClientProps) {
   const router = useRouter();
   const snapshot = (prospect?.use_case_snapshot as SnapshotUseCase[]) ?? [];
   const [index, setIndex] = useState(0);
@@ -118,10 +120,6 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
   const [importance, setImportance] = useState<Record<string, Record<string, Importance>>>(
     (session.component_importance as Record<string, Record<string, Importance>>) ?? {}
   );
-  const [resonated, setResonated] = useState<Set<string>>(
-    new Set(session.resonated_use_case_ids ?? [])
-  );
-
   if (!prospect || snapshot.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-[80vh] text-center p-8">
@@ -135,7 +133,6 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
   const current = snapshot[index];
   const isFirst = index === 0;
   const isLast = index === snapshot.length - 1;
-  const isResonated = resonated.has(current.id);
 
   function setComponentImportance(component: string, level: Importance) {
     const next = {
@@ -147,18 +144,10 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
     supabase.from("meeting_sessions").update({ component_importance: next }).eq("id", session.id).then(() => {});
   }
 
-  function toggleResonance() {
-    const next = new Set(resonated);
-    if (isResonated) next.delete(current.id); else next.add(current.id);
-    setResonated(next);
-    const supabase = createClient();
-    supabase.from("meeting_sessions").update({ resonated_use_case_ids: [...next] }).eq("id", session.id).then(() => {});
-  }
-
   async function endMeeting() {
     const supabase = createClient();
     await supabase.from("meeting_sessions").update({ status: "ended" }).eq("id", session.id);
-    router.push(`/meeting/${session.id}/summary`);
+    window.location.href = `/meeting/${session.id}/summary`;
   }
 
   return (
@@ -176,7 +165,7 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
                 onClick={() => setIndex(i)}
                 className={cn(
                   "h-2 rounded-full transition-all",
-                  i === index ? "w-6 bg-primary" : resonated.has(uc.id) ? "w-2 bg-primary/40" : "w-2 bg-muted"
+                  i === index ? "w-6 bg-primary" : "w-2 bg-muted"
                 )}
                 title={uc.title}
               />
@@ -184,7 +173,6 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">{resonated.size} resonated</span>
           <button
             onClick={endMeeting}
             className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive")}
@@ -250,12 +238,21 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
                 {current.components.map((component) => {
                   const level = importance[current.id]?.[component] ?? null;
                   return (
-                    <div key={component} className="grid grid-cols-[1fr_auto] items-center gap-x-3">
+                    <div key={component} className={cn("grid items-center gap-x-3", meetingType === "continuation" ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[1fr_auto]")}>
                       <span className="text-sm leading-snug">{component}</span>
                       <ImportanceDropdown
                         value={level}
                         onChange={(v) => setComponentImportance(component, v)}
                       />
+                      {meetingType === "continuation" && (
+                        <ArtifactPanel
+                          sessionId={session.id}
+                          prospectId={prospect?.id ?? null}
+                          ucId={current.id}
+                          componentName={component}
+                          consultantId={session.consultant_id}
+                        />
+                      )}
                     </div>
                   );
                 })}
@@ -263,7 +260,7 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
             )}
           </div>
 
-          {/* Navigation + resonance */}
+          {/* Navigation */}
           <div className="flex items-center justify-between gap-4">
             <button
               onClick={() => setIndex((i) => Math.max(0, i - 1))}
@@ -272,19 +269,6 @@ export function MeetingClient({ session, prospect }: MeetingClientProps) {
             >
               <ChevronLeft className="h-5 w-5" />
               Previous
-            </button>
-
-            <button
-              onClick={toggleResonance}
-              className={cn(
-                "flex items-center gap-2.5 rounded-xl px-8 py-4 text-base font-semibold transition-all border-2",
-                isResonated
-                  ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20"
-                  : "bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
-              )}
-            >
-              <CheckCircle2 className={cn("h-5 w-5", isResonated && "fill-primary-foreground")} />
-              {isResonated ? "Resonated!" : "This resonates"}
             </button>
 
             <button

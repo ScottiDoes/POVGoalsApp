@@ -10,6 +10,7 @@ async function startMeeting(formData: FormData) {
   const prospect_id = (formData.get("prospect_id") as string)?.trim() || null;
   const prospect_name = (formData.get("prospect_name") as string)?.trim() || null;
   const prospect_company = (formData.get("prospect_company") as string)?.trim() || null;
+  const meeting_type = ((formData.get("meeting_type") as string)?.trim() || "continuation") as "kickoff" | "continuation";
 
   const { data: session } = await supabase
     .from("meeting_sessions")
@@ -17,6 +18,7 @@ async function startMeeting(formData: FormData) {
       consultant_id: user!.id,
       prospect_name,
       prospect_company,
+      meeting_type,
       ...(prospect_id ? { prospect_id } : {}),
     })
     .select("id")
@@ -40,7 +42,7 @@ export default async function NewMeetingPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">Start a meeting</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Select a prospect from your POV tracker to begin.
+          Choose a meeting type, then select your prospect.
         </p>
       </div>
 

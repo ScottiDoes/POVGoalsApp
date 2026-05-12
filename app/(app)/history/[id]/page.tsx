@@ -21,12 +21,19 @@ export default async function SessionDetailPage({ params }: { params: Promise<{ 
   if (!session) redirect("/history");
 
   const resonatedIds = session.resonated_use_case_ids ?? [];
+
   const { data: resonatedUseCases } = resonatedIds.length > 0
     ? await supabase
         .from("use_cases_consultant")
         .select("id, pain_point_tag, roi_stat, roi_description, before_text, after_text")
         .in("id", resonatedIds)
     : { data: [] };
+
+  const { data: artifacts } = await supabase
+    .from("component_artifacts")
+    .select("*")
+    .eq("session_id", id)
+    .order("created_at", { ascending: true });
 
   return (
     <div className="p-8">
@@ -41,6 +48,7 @@ export default async function SessionDetailPage({ params }: { params: Promise<{ 
       <SummaryClient
         session={session}
         resonatedUseCases={resonatedUseCases ?? []}
+        artifacts={artifacts ?? []}
         readOnly={true}
       />
     </div>

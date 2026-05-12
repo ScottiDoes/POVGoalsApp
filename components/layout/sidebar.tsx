@@ -7,9 +7,35 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { LogOut, Play, Radio } from "lucide-react";
+import { LogOut, Moon, Palette, Play, Radio, Sun } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
+import { useEffect, useRef, useState } from "react";
+
+const ACCENT_COLORS = [
+  { key: "teal",   label: "Teal",   hex: "#11B989", oklch: "0.66 0.155 165" },
+  { key: "blue",   label: "Blue",   hex: "#3B82F6", oklch: "0.62 0.19 255"  },
+  { key: "indigo", label: "Indigo", hex: "#6366F1", oklch: "0.59 0.23 275"  },
+  { key: "purple", label: "Purple", hex: "#8B5CF6", oklch: "0.61 0.22 292"  },
+  { key: "pink",   label: "Pink",   hex: "#EC4899", oklch: "0.65 0.22 350"  },
+  { key: "orange", label: "Orange", hex: "#F97316", oklch: "0.72 0.19 50"   },
+  { key: "red",    label: "Red",    hex: "#EF4444", oklch: "0.63 0.22 25"   },
+  { key: "black",  label: "Black",  hex: "#18181B", oklch: "0.14 0.005 286" },
+] as const;
+
+type AccentKey = typeof ACCENT_COLORS[number]["key"];
+
+const ACCENT_LS_KEY = "pov-accent-color";
+
+function applyAccent(oklch: string) {
+  const val = `oklch(${oklch})`;
+  const root = document.documentElement;
+  root.style.setProperty("--primary", val);
+  root.style.setProperty("--ring", val);
+  root.style.setProperty("--sidebar-primary", val);
+  root.style.setProperty("--sidebar-ring", val);
+}
 
 interface SidebarProps {
   userName: string;
@@ -20,6 +46,41 @@ interface SidebarProps {
 export function Sidebar({ userName, userEmail, activeMeetingId }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [accentKey, setAccentKey] = useState<AccentKey>("teal");
+  const paletteRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  // Load saved accent on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(ACCENT_LS_KEY) as AccentKey | null;
+    if (saved) {
+      const color = ACCENT_COLORS.find((c) => c.key === saved);
+      if (color) { setAccentKey(saved); applyAccent(color.oklch); }
+    }
+  }, []);
+
+  // Close palette on outside click
+  useEffect(() => {
+    if (!paletteOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (paletteRef.current && !paletteRef.current.contains(e.target as Node)) {
+        setPaletteOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [paletteOpen]);
+
+  function selectAccent(color: typeof ACCENT_COLORS[number]) {
+    setAccentKey(color.key);
+    applyAccent(color.oklch);
+    localStorage.setItem(ACCENT_LS_KEY, color.key);
+    setPaletteOpen(false);
+  }
 
   const initials = userName
     .split(" ")
@@ -47,6 +108,48 @@ export function Sidebar({ userName, userEmail, activeMeetingId }: SidebarProps) 
           <span className="text-primary font-bold text-sm">P</span>
         </div>
         <span className="font-semibold text-sm tracking-tight">POV Win Goals</span>
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+            className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded"
+            title="Toggle theme"
+          >
+            {mounted ? (resolvedTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />) : <Sun className="h-4 w-4" />}
+          </button>
+
+          {/* Accent color picker */}
+          <div ref={paletteRef} className="relative">
+            <button
+              onClick={() => setPaletteOpen((o) => !o)}
+              className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded"
+              title="Accent color"
+            >
+              <Palette className="h-4 w-4" />
+            </button>
+
+            {paletteOpen && (
+              <div className="absolute right-0 top-full mt-2 z-50 w-48 rounded-lg border border-border bg-card shadow-lg p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                  Accent color
+                </p>
+                <div className="flex flex-wrap gap-3 px-1 pb-1">
+                  {ACCENT_COLORS.map((color) => (
+                    <button
+                      key={color.key}
+                      onClick={() => selectAccent(color)}
+                      title={color.label}
+                      className={cn(
+                        "h-6 w-6 rounded-full border-2 transition-transform hover:scale-110",
+                        accentKey === color.key ? "border-foreground scale-110" : "border-transparent"
+                      )}
+                      style={{ backgroundColor: color.hex }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <ScrollArea className="flex-1">

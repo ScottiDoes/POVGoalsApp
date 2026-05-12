@@ -19,7 +19,7 @@ export default async function HistoryPage() {
 
   const { data: sessions } = await supabase
     .from("meeting_sessions")
-    .select("id, prospect_name, prospect_company, resonated_use_case_ids, next_step, created_at")
+    .select("id, prospect_name, prospect_company, resonated_use_case_ids, next_step, created_at, meeting_type")
     .eq("consultant_id", user!.id)
     .order("created_at", { ascending: false });
 
@@ -62,7 +62,17 @@ export default async function HistoryPage() {
                 className="flex items-center justify-between p-4 bg-secondary/20 hover:bg-secondary/50 transition-colors group"
               >
                 <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{label}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium truncate">{label}</p>
+                    <span className={cn(
+                      "shrink-0 text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 border",
+                      session.meeting_type === "kickoff"
+                        ? "bg-primary/10 text-primary border-primary/20"
+                        : "bg-blue/10 text-blue-400 border-blue/20"
+                    )}>
+                      {session.meeting_type === "kickoff" ? "Kickoff" : "Continuation"}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-3 mt-1">
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
                       <CalendarDays className="h-3 w-3" />
@@ -80,6 +90,7 @@ export default async function HistoryPage() {
                     )}
                   </div>
                 </div>
+
                 <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 ml-4 group-hover:text-foreground transition-colors" />
               </Link>
             );

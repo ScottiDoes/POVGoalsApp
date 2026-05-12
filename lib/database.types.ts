@@ -104,12 +104,61 @@ export type Database = {
           },
         ]
       }
+      component_artifacts: {
+        Row: {
+          component_name: string
+          created_at: string
+          id: string
+          note: string | null
+          prospect_id: string | null
+          session_id: string
+          storage_path: string
+          use_case_id: string
+        }
+        Insert: {
+          component_name: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          prospect_id?: string | null
+          session_id: string
+          storage_path: string
+          use_case_id: string
+        }
+        Update: {
+          component_name?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          prospect_id?: string | null
+          session_id?: string
+          storage_path?: string
+          use_case_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "component_artifacts_prospect_id_fkey"
+            columns: ["prospect_id"]
+            isOneToOne: false
+            referencedRelation: "pov_prospects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "component_artifacts_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meeting_sessions: {
         Row: {
           component_importance: Json
           consultant_id: string
           created_at: string
           id: string
+          meeting_type: Database["public"]["Enums"]["meeting_type"]
           next_step: Database["public"]["Enums"]["next_step_type"] | null
           next_step_other: string | null
           notes: string | null
@@ -124,6 +173,7 @@ export type Database = {
           consultant_id: string
           created_at?: string
           id?: string
+          meeting_type?: Database["public"]["Enums"]["meeting_type"]
           next_step?: Database["public"]["Enums"]["next_step_type"] | null
           next_step_other?: string | null
           notes?: string | null
@@ -138,6 +188,7 @@ export type Database = {
           consultant_id?: string
           created_at?: string
           id?: string
+          meeting_type?: Database["public"]["Enums"]["meeting_type"]
           next_step?: Database["public"]["Enums"]["next_step_type"] | null
           next_step_other?: string | null
           notes?: string | null
@@ -404,6 +455,7 @@ export type Database = {
         | "complete"
         | "disregarded"
       goal_status: "not_started" | "in_progress" | "achieved"
+      meeting_type: "kickoff" | "continuation"
       next_step_type:
         | "technical_deep_dive"
         | "pilot_scoping"
@@ -549,6 +601,7 @@ export const Constants = {
         "disregarded",
       ],
       goal_status: ["not_started", "in_progress", "achieved"],
+      meeting_type: ["kickoff", "continuation"],
       next_step_type: [
         "technical_deep_dive",
         "pilot_scoping",
