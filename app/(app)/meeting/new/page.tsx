@@ -1,70 +1,52 @@
 import { createClient } from "@/lib/supabase/server";
-import { buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
-import { Play } from "lucide-react";
 import { redirect } from "next/navigation";
+import { NewMeetingClient } from "./new-meeting-client";
 
 async function startMeeting(formData: FormData) {
   "use server";
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  const prospect_id = (formData.get("prospect_id") as string)?.trim() || null;
   const prospect_name = (formData.get("prospect_name") as string)?.trim() || null;
   const prospect_company = (formData.get("prospect_company") as string)?.trim() || null;
+  const meeting_type = ((formData.get("meeting_type") as string)?.trim() || "continuation") as "kickoff" | "continuation";
 
   const { data: session } = await supabase
     .from("meeting_sessions")
-    .insert({ consultant_id: user!.id, prospect_name, prospect_company })
+    .insert({
+      consultant_id: user!.id,
+      prospect_name,
+      prospect_company,
+      meeting_type,
+      ...(prospect_id ? { prospect_id } : {}),
+    })
     .select("id")
     .single();
 
   redirect(`/meeting/${session!.id}`);
 }
 
-export default function NewMeetingPage() {
+export default async function NewMeetingPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data: prospects } = await supabase
+    .from("pov_prospects")
+    .select("id, org_name, contact_name")
+    .eq("consultant_id", user!.id)
+    .order("org_name", { ascending: true });
+
   return (
     <div className="p-8 max-w-lg">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">Start a meeting</h1>
         <p className="text-muted-foreground mt-1 text-sm">
-          Prospect info is optional — you can add it in the summary.
+          Choose a meeting type, then select your prospect.
         </p>
       </div>
 
-      <form action={startMeeting} className="grid gap-5">
-        <div className="grid gap-2">
-          <Label htmlFor="prospect_name">Prospect name</Label>
-          <Input
-            id="prospect_name"
-            name="prospect_name"
-            placeholder="e.g. Jane Smith"
-            autoComplete="off"
-          />
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="prospect_company">Company</Label>
-          <Input
-            id="prospect_company"
-            name="prospect_company"
-            placeholder="e.g. Acme Corp"
-            autoComplete="off"
-          />
-        </div>
-
-        <button
-          type="submit"
-          className={cn(
-            buttonVariants({ size: "lg" }),
-            "mt-2 bg-primary text-primary-foreground hover:bg-primary/90 gap-2 w-full"
-          )}
-        >
-          <Play className="h-4 w-4" />
-          Start Meeting
-        </button>
-      </form>
+      <NewMeetingClient prospects={prospects ?? []} action={startMeeting} />
     </div>
   );
 }

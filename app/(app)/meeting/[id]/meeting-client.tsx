@@ -1,23 +1,29 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, ChevronLeft, ChevronRight, Library } from "lucide-react";
-import Link from "next/link";
+import { format } from "date-fns";
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, UserRound, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Database } from "@/lib/database.types";
+import type { SnapshotUseCase } from "@/app/(app)/goals/types";
+import { ArtifactPanel } from "./artifact-panel";
 
 type Session = Database["public"]["Tables"]["meeting_sessions"]["Row"];
-type UseCase = {
-  id: string;
-  pain_point_tag: string;
-  roi_stat: string;
-  roi_description: string;
-  before_text: string;
-  after_text: string;
+
+// Importance levels — ordered descending by significance
+const IMPORTANCE_LEVELS = ["critical", "important", "nice_to_have", "not_required"] as const;
+type Importance = typeof IMPORTANCE_LEVELS[number];
+
+const IMPORTANCE_CONFIG: Record<Importance, { label: string; className: string; dotClass: string }> = {
+  critical:     { label: "Critical",      className: "bg-red-500/10 text-red-400 border-red-500/30",    dotClass: "bg-red-400" },
+  important:    { label: "Important",     className: "bg-orange/10 text-orange-400 border-orange/30",   dotClass: "bg-orange-400" },
+  nice_to_have: { label: "Nice to have",  className: "bg-blue/10 text-blue-400 border-blue/30",         dotClass: "bg-blue-400" },
+  not_required: { label: "Not required",  className: "bg-muted/60 text-muted-foreground border-border", dotClass: "bg-muted-foreground/40" },
 };
 
 const PAIN_POINT_COLORS: Record<string, string> = {
@@ -28,193 +34,248 @@ const PAIN_POINT_COLORS: Record<string, string> = {
   "Customer Success":  "bg-green/10 text-green-400 border-green/20",
 };
 
-function tagColor(tag: string) {
-  return PAIN_POINT_COLORS[tag] ?? "bg-muted text-muted-foreground border-border";
+interface Prospect {
+  id: string;
+  org_name: string;
+  contact_name: string | null;
+  main_goals: string | null;
+  kickoff_date: string | null;
+  end_date: string | null;
+  use_case_snapshot: unknown;
+  component_statuses: unknown;
 }
 
 interface MeetingClientProps {
   session: Session;
-  useCases: UseCase[];
+  prospect: Prospect | null;
+  meetingType: "kickoff" | "continuation";
 }
 
-export function MeetingClient({ session, useCases }: MeetingClientProps) {
-  const router = useRouter();
-  const [index, setIndex] = useState(0);
-  const [resonated, setResonated] = useState<Set<string>>(
-    new Set(session.resonated_use_case_ids ?? [])
-  );
+function ImportanceDropdown({
+  value,
+  onChange,
+}: {
+  value: Importance | null;
+  onChange: (v: Importance) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-  if (useCases.length === 0) {
+  const cfg = value ? IMPORTANCE_CONFIG[value] : null;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-medium transition-colors whitespace-nowrap",
+          cfg ? cfg.className : "bg-muted/40 text-muted-foreground/60 border-border hover:border-primary/30 hover:text-muted-foreground"
+        )}
+      >
+        {cfg && <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", cfg.dotClass)} />}
+        {cfg ? cfg.label : "Set importance"}
+        <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+      </button>
+
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          {/* Menu */}
+          <div className="absolute right-0 top-full mt-1 z-20 min-w-[140px] rounded-md border border-border bg-card shadow-lg py-1">
+            {IMPORTANCE_LEVELS.map((level) => {
+              const lcfg = IMPORTANCE_CONFIG[level];
+              return (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => { onChange(level); setOpen(false); }}
+                  className={cn(
+                    "flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left transition-colors hover:bg-muted/50",
+                    value === level ? "font-semibold" : "font-normal"
+                  )}
+                >
+                  <span className={cn("h-2 w-2 rounded-full shrink-0", lcfg.dotClass)} />
+                  <span className={cn(
+                    value === level ? lcfg.className.split(" ").find(c => c.startsWith("text-")) : "text-foreground/80"
+                  )}>
+                    {lcfg.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function MeetingClient({ session, prospect, meetingType }: MeetingClientProps) {
+  const router = useRouter();
+  const snapshot = (prospect?.use_case_snapshot as SnapshotUseCase[]) ?? [];
+  const [index, setIndex] = useState(0);
+  // importance: { ucId: { componentName: Importance } }
+  const [importance, setImportance] = useState<Record<string, Record<string, Importance>>>(
+    (session.component_importance as Record<string, Record<string, Importance>>) ?? {}
+  );
+  if (!prospect || snapshot.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-[80vh] text-center p-8">
-        <Library className="h-12 w-12 text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold mb-2">No use cases in your library</h2>
-        <p className="text-muted-foreground text-sm mb-6">
-          Add use cases to your library before running a meeting.
+        <p className="text-muted-foreground text-sm">
+          No use cases found for this prospect. Add some in POV Progress first.
         </p>
-        <Link
-          href="/library"
-          className={cn(buttonVariants(), "bg-primary text-primary-foreground hover:bg-primary/90")}
-        >
-          Go to Library
-        </Link>
       </div>
     );
   }
 
-  const current = useCases[index];
-  const isResonated = resonated.has(current.id);
+  const current = snapshot[index];
   const isFirst = index === 0;
-  const isLast = index === useCases.length - 1;
+  const isLast = index === snapshot.length - 1;
 
-  function toggleResonance() {
-    const next = new Set(resonated);
-    if (isResonated) {
-      next.delete(current.id);
-    } else {
-      next.add(current.id);
-    }
-    setResonated(next);
+  function setComponentImportance(component: string, level: Importance) {
+    const next = {
+      ...importance,
+      [current.id]: { ...(importance[current.id] ?? {}), [component]: level },
+    };
+    setImportance(next);
     const supabase = createClient();
-    supabase
-      .from("meeting_sessions")
-      .update({ resonated_use_case_ids: [...next] })
-      .eq("id", session.id)
-      .then(() => {});
+    supabase.from("meeting_sessions").update({ component_importance: next }).eq("id", session.id).then(() => {});
   }
 
-  function prev() {
-    setIndex((i) => Math.max(0, i - 1));
-  }
-
-  function next() {
-    setIndex((i) => Math.min(useCases.length - 1, i + 1));
-  }
-
-  function done() {
-    router.push(`/meeting/${session.id}/summary`);
+  async function endMeeting() {
+    const supabase = createClient();
+    await supabase.from("meeting_sessions").update({ status: "ended" }).eq("id", session.id);
+    window.location.href = `/meeting/${session.id}/summary`;
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-0px)] p-6 gap-6">
+    <div className="flex flex-col h-screen p-6 gap-5">
       {/* Top bar */}
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground font-medium">
-            {index + 1} / {useCases.length}
+          <span className="text-sm text-muted-foreground">
+            Use case {index + 1} of {snapshot.length}
           </span>
-          {/* Progress dots */}
           <div className="flex gap-1.5">
-            {useCases.map((uc, i) => (
+            {snapshot.map((uc, i) => (
               <button
                 key={uc.id}
                 onClick={() => setIndex(i)}
                 className={cn(
                   "h-2 rounded-full transition-all",
-                  i === index
-                    ? "w-6 bg-primary"
-                    : resonated.has(uc.id)
-                    ? "w-2 bg-primary/40"
-                    : "w-2 bg-muted"
+                  i === index ? "w-6 bg-primary" : "w-2 bg-muted"
                 )}
-                title={`Use case ${i + 1}`}
+                title={uc.title}
               />
             ))}
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            {resonated.size} resonated
-          </span>
           <button
-            onClick={done}
-            className={cn(
-              buttonVariants({ size: "sm" }),
-              "bg-primary text-primary-foreground hover:bg-primary/90"
-            )}
+            onClick={endMeeting}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive")}
           >
-            Done
+            <X className="h-3.5 w-3.5" />
+            End Meeting
           </button>
         </div>
       </div>
 
-      {/* Use case card */}
+      {/* Main content */}
       <div className="flex-1 flex items-center justify-center min-h-0">
-        <div className="w-full max-w-3xl">
-          {/* Tag */}
-          <div className="flex justify-center mb-6">
-            <Badge
-              variant="outline"
-              className={cn("text-sm font-medium px-4 py-1", tagColor(current.pain_point_tag))}
-            >
-              {current.pain_point_tag}
-            </Badge>
-          </div>
+        <div className="w-full max-w-2xl flex flex-col gap-4">
 
-          {/* ROI */}
-          <div className="text-center mb-8">
-            <p className="text-7xl font-bold text-primary leading-none mb-2">
-              {current.roi_stat}
-            </p>
-            {current.roi_description && (
-              <p className="text-xl text-muted-foreground">{current.roi_description}</p>
+          {/* Prospect info card */}
+          <Card className="border-border bg-secondary/40 w-full">
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-xl font-semibold leading-tight">{prospect.org_name}</h2>
+                  {prospect.contact_name && (
+                    <div className="flex items-center gap-1.5 mt-1 text-sm text-muted-foreground">
+                      <UserRound className="h-3.5 w-3.5 shrink-0" />
+                      {prospect.contact_name}
+                    </div>
+                  )}
+                  {prospect.main_goals && (
+                    <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                      <span className="text-foreground/60 font-medium">Goals: </span>
+                      {prospect.main_goals}
+                    </p>
+                  )}
+                </div>
+                {(prospect.kickoff_date || prospect.end_date) && (
+                  <div className="flex flex-col items-end gap-1 text-xs text-muted-foreground shrink-0">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    {prospect.kickoff_date && <span>{format(new Date(prospect.kickoff_date), "MMM d")}</span>}
+                    {prospect.end_date && <span>→ {format(new Date(prospect.end_date), "MMM d, yyyy")}</span>}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Use case + components */}
+          <div className="rounded-lg border border-border bg-secondary/20 px-5 py-4">
+            {/* Use case header */}
+            <div className="flex items-center gap-2 flex-wrap mb-3">
+              <span className="font-semibold text-base">
+                {current.title || `${current.roi_stat} ${current.roi_description}`}
+              </span>
+              <Badge
+                variant="outline"
+                className={cn("text-[10px] font-medium", PAIN_POINT_COLORS[current.pain_point_tag] ?? "bg-muted text-muted-foreground border-border")}
+              >
+                {current.pain_point_tag}
+              </Badge>
+            </div>
+
+            {/* Components */}
+            {current.components.length > 0 && (
+              <div className="space-y-2 pl-3 border-l border-border">
+                {current.components.map((component) => {
+                  const level = importance[current.id]?.[component] ?? null;
+                  return (
+                    <div key={component} className={cn("grid items-center gap-x-3", meetingType === "continuation" ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[1fr_auto]")}>
+                      <span className="text-sm leading-snug">{component}</span>
+                      <ImportanceDropdown
+                        value={level}
+                        onChange={(v) => setComponentImportance(component, v)}
+                      />
+                      {meetingType === "continuation" && (
+                        <ArtifactPanel
+                          sessionId={session.id}
+                          prospectId={prospect?.id ?? null}
+                          ucId={current.id}
+                          componentName={component}
+                          consultantId={session.consultant_id}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
 
-          {/* Before / After */}
-          <div className="grid grid-cols-2 gap-4 mb-8">
-            <div className="rounded-xl bg-muted/50 p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
-                Before
-              </p>
-              <p className="text-base leading-relaxed">{current.before_text}</p>
-            </div>
-            <div className="rounded-xl bg-primary/5 border border-primary/15 p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-primary/60 mb-3">
-                After
-              </p>
-              <p className="text-base leading-relaxed">{current.after_text}</p>
-            </div>
-          </div>
-
-          {/* Navigation + Resonance */}
+          {/* Navigation */}
           <div className="flex items-center justify-between gap-4">
             <button
-              onClick={prev}
+              onClick={() => setIndex((i) => Math.max(0, i - 1))}
               disabled={isFirst}
-              className={cn(
-                buttonVariants({ variant: "outline", size: "lg" }),
-                "gap-2 min-w-[120px]",
-                isFirst && "opacity-30 pointer-events-none"
-              )}
+              className={cn(buttonVariants({ variant: "outline", size: "lg" }), "gap-2 min-w-[120px]", isFirst && "opacity-30 pointer-events-none")}
             >
               <ChevronLeft className="h-5 w-5" />
               Previous
             </button>
 
             <button
-              onClick={toggleResonance}
-              className={cn(
-                "flex items-center gap-2.5 rounded-xl px-8 py-4 text-base font-semibold transition-all border-2",
-                isResonated
-                  ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20"
-                  : "bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
-              )}
+              onClick={() => isLast ? endMeeting() : setIndex((i) => i + 1)}
+              className={cn(buttonVariants({ size: "lg" }), "gap-2 min-w-[120px] bg-primary text-primary-foreground hover:bg-primary/90")}
             >
-              <CheckCircle2 className={cn("h-5 w-5", isResonated ? "fill-primary-foreground" : "")} />
-              {isResonated ? "Resonated!" : "This resonates"}
-            </button>
-
-            <button
-              onClick={next}
-              disabled={isLast}
-              className={cn(
-                buttonVariants({ size: "lg" }),
-                "gap-2 min-w-[120px] bg-primary text-primary-foreground hover:bg-primary/90",
-                isLast && "opacity-30 pointer-events-none"
-              )}
-            >
-              Next
+              {isLast ? "Finish" : "Next"}
               <ChevronRight className="h-5 w-5" />
             </button>
           </div>

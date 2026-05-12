@@ -208,6 +208,31 @@ Do not build or stub these — they are explicitly deferred:
 
 ---
 
+## Git branching workflow
+
+Three long-lived branches. Never commit directly to `qa` or `main`.
+
+| Branch | Purpose | Vercel environment |
+|--------|---------|-------------------|
+| `dev`  | Active development — all commits land here | Preview (dev URL) |
+| `qa`   | Stable build ready for review and testing | Preview (qa URL) |
+| `main` | Production — only merged from `qa` | Production URL |
+
+**Promotion flow:**
+
+```
+dev  →  (PR)  →  qa  →  (PR)  →  main
+```
+
+1. All code changes go to `dev` (auto-push is fine here).
+2. When a feature or batch of changes is done, open a PR from `dev → qa` on GitHub.
+3. Test on the `qa` Vercel preview URL — confirm everything works.
+4. Open a PR from `qa → main` to ship to production.
+
+`dev` is the default GitHub branch. Vercel auto-deploys all three branches to separate preview URLs on every push.
+
+---
+
 ## Commands
 
 ```bash
@@ -217,4 +242,4 @@ npm run lint         # ESLint
 npx supabase start   # Start local Supabase stack
 ```
 
-Deploy: push to `main` — Vercel handles the rest.
+Deploy: merge `qa → main` via PR — Vercel handles the rest.

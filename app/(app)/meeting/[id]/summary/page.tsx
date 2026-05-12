@@ -24,10 +24,17 @@ export default async function SummaryPage({ params }: { params: Promise<{ id: st
         .in("id", resonatedIds)
     : { data: [] };
 
+  const { data: artifacts } = await supabase
+    .from("component_artifacts")
+    .select("*")
+    .eq("session_id", id)
+    .order("created_at", { ascending: true });
+
   return (
     <SummaryClient
       session={session}
       resonatedUseCases={resonatedUseCases ?? []}
+      artifacts={artifacts ?? []}
       readOnly={false}
     />
   );
